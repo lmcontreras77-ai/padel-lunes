@@ -100,6 +100,8 @@
   .lv-buena .pill{background:#eaf4d4;color:#4d6b0f} .lv-buena .rbar i{background:#8cc63f}
   .lv-abierta .pill{background:#eef1f5;color:var(--muted)} .lv-abierta .rbar i{background:#9aa7b8}
   .lv-floja .pill{background:#fdf1d8;color:#9a6508} .lv-floja .rbar i{background:var(--maybe)}
+  .lv-urgente .pill{background:var(--maybe);color:#2b1d00} .lv-urgente .rbar i{background:var(--maybe)}
+  .lv-urgente{background:#fff7e0}
   .lv-cancel .pill{background:#fde6e7;color:#b3262b} .lv-cancel .rbar i{background:var(--no)}
   .rmore{background:none;border:none;color:var(--court);font-weight:600;cursor:pointer;padding:10px 6px 0;font-size:14px}
   .fri.flash{animation:flash 1.2s ease}
@@ -235,12 +237,17 @@
   // Ranking: chances de que se juegue cada lunes
   function level(r){
     const unk = r.unk; // jugadores fijos sin marcar
-    if (r.max < 4) return {cls:"cancel", label:"Posiblemente cancelado", score:-10 + r.max};
+    // Nadie puede: todos marcaron "no" y no hay invitados
+    if (r.no === PLAYERS.length && r.guests === 0) return {cls:"cancel", label:"Cancelado", score:-20};
+    // Cancelado solo si faltan 2 o más aunque todos los pendientes digan que sí
+    if (r.max <= 2) return {cls:"cancel", label:"Posiblemente cancelado", score:-10 + r.max};
     if (r.ok >= 4) return {cls:"alta", label:"Confirmado", score:100 + r.ok};
     if (r.ok + r.maybe >= 4) return {cls:"buena", label:"Buenas chances", score:50 + r.ok + r.maybe*.5};
     const score = r.ok + r.maybe*.5 + unk*.35 - r.no*.6;
-    // Difícil: un "no" más y ya no se llega a 4
-    if (r.max === 4) return {cls:"floja", label:"Invitar a alguien", score};
+    // 3 confirmados y todavía hay jugadores sin marcar
+    if (r.ok === 3 && unk > 0) return {cls:"floja", label:"Invitar a alguien o pedir votar", score};
+    // Invitar a alguien: falta uno (o un "no" más y ya no se llega a 4)
+    if (r.max <= 4) return {cls:"floja", label:"Invitar a alguien", score};
     return {cls:"abierta", label:"Falta que marquen", score: 10 + score};
   }
   function chance(r, lv){
@@ -252,7 +259,14 @@
   function renderRank(rows){
     if (!loaded){ $("rank").innerHTML = ""; return; }
     // En orden de calendario, cada lunes con su chance
-    const list = rows.map(r=>({r, lv: level(r)}));
+    // Si la fecha de esta semana (próximos 6 días) necesita invitar, se marca como urgente
+    const today = new Date(); today.setHours(0,0,0,0);
+    const list = rows.map(r=>{
+      let lv = level(r);
+      const days = Math.round((r.d - today) / 86400000);
+      if (lv.cls === "floja" && days >= 0 && days <= 6) lv = {...lv, cls:"urgente", label: lv.label + " ya mismo"};
+      return {r, lv};
+    });
     $("rank").innerHTML = `<h2>Chances por lunes</h2><p class="sub">En orden de fecha, con las chances de que se juegue cada uno. Tocá uno para ir a ese lunes.</p>` +
       list.map(({r,lv})=>`<div class="rrow lv-${lv.cls}" data-k="${r.k}"><span class="rdate">Lunes ${r.d.getDate()}<small>${MONTHS[r.d.getMonth()]} · ${r.ok} sí · ${r.maybe} duda · ${r.no} no</small></span><span class="pill">${lv.label}</span><span class="rbar"><i style="width:${chance(r,lv)}%"></i></span></div>`).join("");
   }
